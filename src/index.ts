@@ -18,6 +18,9 @@ async function main() {
 
   // 实例化SSH MCP
   const sshMCP = new SshMCP();
+  
+  // 启动时自动连接配置的SSH连接
+  await sshMCP.autoConnectFromEnv();
 
   // 处理进程退出
   process.on('SIGINT', async () => {

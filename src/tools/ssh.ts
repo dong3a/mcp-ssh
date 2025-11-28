@@ -32,6 +32,82 @@ export class SshMCP {
       console.error('连接MCP传输错误:', err);
     });
   }
+  
+  /**
+   * 从环境变量自动连接SSH服务器
+   */
+  public async autoConnectFromEnv(): Promise<void> {
+    const connectJson = process.env.CONNECT_JSON;
+    
+    if (!connectJson) {
+      console.log('未找到 CONNECT_JSON 环境变量，跳过自动连接');
+      return;
+    }
+
+    try {
+      // 解析JSON配置
+      const connections = JSON.parse(connectJson);
+      
+      if (!Array.isArray(connections)) {
+        console.error('CONNECT_JSON 格式错误：应该是一个连接配置数组');
+        return;
+      }
+
+      console.log(`从环境变量加载了 ${connections.length} 个SSH连接配置`);
+
+      // 依次建立连接
+      for (const config of connections) {
+        try {
+          await this.autoConnectSingle(config);
+        } catch (error) {
+          console.error(`自动连接失败 (${config.name || config.host}):`, error instanceof Error ? error.message : String(error));
+        }
+      }
+
+      console.log('自动连接完成');
+    } catch (error) {
+      console.error('解析 CONNECT_JSON 环境变量时出错:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * 自动连接单个SSH服务器
+   */
+  private async autoConnectSingle(config: any): Promise<void> {
+    // 验证必要的配置字段
+    if (!config.host || !config.username) {
+      console.error('连接配置缺少必要字段 (host 或 username)');
+      return;
+    }
+
+    // 设置默认值
+    const connectionConfig = {
+      host: config.host,
+      port: config.port || parseInt(process.env.DEFAULT_SSH_PORT || '22'),
+      username: config.username,
+      password: config.password,
+      privateKey: config.privateKey,
+      passphrase: config.passphrase,
+      keepaliveInterval: 60000,
+      readyTimeout: parseInt(process.env.CONNECTION_TIMEOUT || '10000'),
+      reconnect: config.reconnect !== undefined ? config.reconnect : true,
+      reconnectTries: config.reconnectTries || parseInt(process.env.RECONNECT_ATTEMPTS || '3'),
+      reconnectDelay: 5000
+    };
+
+    // 建立连接
+    const connection = await this.sshService.connect(
+      connectionConfig,
+      config.name,
+      config.rememberPassword !== undefined ? config.rememberPassword : true,
+      config.tags
+    );
+
+    // 记录活跃连接
+    this.activeConnections.set(connection.id, new Date());
+
+    console.log(`✅ 成功自动连接到: ${connection.name || connection.id}`);
+  }
 
   /**
    * 注册所有MCP工具
